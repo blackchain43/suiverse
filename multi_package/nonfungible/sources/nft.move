@@ -129,12 +129,18 @@ module nonfungible::nft{
         ctx: &mut TxContext
     ) {
         assert!(coin::value(&fee) >= mintingtreasury.mintingfee, EInsufficientBalance);
+        let balance = coin::balance_mut<SUI>(&mut fee);
+        let remain_amount = balance::value(balance) - mintingtreasury.mintingfee;
         // add a payment to the minting treasury balance
-        balance::join(&mut mintingtreasury.balance, coin::into_balance(fee));
+        balance::join(&mut mintingtreasury.balance, balance::split(balance, mintingtreasury.mintingfee));
+        
+        let remain = coin::take<SUI>(balance, remain_amount, ctx);
+        transfer::public_transfer<Coin<SUI>>(remain, sender(ctx));
 
         //mint the NFT and transfer to sender
         let nft = mint(name, description, url, ctx);
         transfer::transfer(nft, tx_context::sender(ctx));
+        coin::destroy_zero(fee);
    }
 
    /// Privileged mint a S6kTestNFT to an account 

@@ -1,11 +1,11 @@
 [package]
-name = "nonfungible"
+name = "Nonfungible"
 version = "0.0.1"
-published-at="0xe0feebe6c72e42eefa51c02442170144304afd81e7e2de06cf660bb0f9989dc4"
+# published-at="0xe0feebe6c72e42eefa51c02442170144304afd81e7e2de06cf660bb0f9989dc4"
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "devnet" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
 
 [addresses]
-nonfungible = "0xe0feebe6c72e42eefa51c02442170144304afd81e7e2de06cf660bb0f9989dc4"
+nonfungible = "0x0"
 sui =  "0000000000000000000000000000000000000000000000000000000000000002"
