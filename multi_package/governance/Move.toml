@@ -1,11 +1,13 @@
 [package]
-name = "DepPackage"
+name = "GovernancePackage"
 version = "0.0.1"
-published-at="0x46d0aae6afa62bf24e616aaaaaeaf3772401fd65f117ce3de0d374e48a2c153c"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
+# DepPackage = { local = "../dep_package" }
+Nonfungible = { local = "../nonfungible"}
+
 
 [addresses]
-dep_package = "0x46d0aae6afa62bf24e616aaaaaeaf3772401fd65f117ce3de0d374e48a2c153c"
+governance = "0x0"
 sui =  "0000000000000000000000000000000000000000000000000000000000000002"

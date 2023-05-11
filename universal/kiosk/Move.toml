@@ -1,11 +1,10 @@
 [package]
-name = "Nonfungible"
+name = "KioskRulePackage"
 version = "0.0.1"
-published-at="0x86f9712a84d486020a1876f2a870c26630ba1e806bd73e65ca4df0bdc4d4e543"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
 
 [addresses]
-nonfungible = "0x86f9712a84d486020a1876f2a870c26630ba1e806bd73e65ca4df0bdc4d4e543"
+kiosk =  "0x0"
 sui =  "0000000000000000000000000000000000000000000000000000000000000002"
