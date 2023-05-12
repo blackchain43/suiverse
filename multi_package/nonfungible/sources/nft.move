@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 module nonfungible::nft{
-   use std::string::{Self, utf8, String};
+   use std::string::{Self, utf8, String, bytes};
    use std::vector;
+   use std::fixed_point32::{ FixedPoint32, create_from_rational, multiply_u64 };
    use sui::object::{Self, UID, ID};
    use sui::tx_context::{Self, TxContext, sender};
    use sui::balance::{Self, Balance};
@@ -19,22 +20,28 @@ module nonfungible::nft{
 
    const U64_MAX: u64 = 18446744073709551615;
    const MIN_OF_MAX_TOTAL_MINTS: u64 = 1;
-   const TOKEN_NAME_PREFIX: vector<u8> = b"WorryPepe NFT #";
+   const TOKEN_NAME_PREFIX: vector<u8> = b"XWorry NFT #";
    const TOKEN_URL: vector<u8> = b"https://img-08.stickers.cloud/packs/787053f4-0bd6-45f0-9a58-715b54913177/webp/ce810738-214d-4b3b-ab2f-aead08c5f7f8.webp";
-   const TOKEN_DESCRIPTION: vector<u8>  = b"$WPEPE The biggest airdrop on SUI mainnet";
+   const TOKEN_DESCRIPTION: vector<u8>  = b"$XWORRY The biggest airdrop on SUI mainnet";
+   const MINT_REF_PERCENT_DENUMERATOR: u64 = 1000;
+
    const EInsufficientBalance: u64 = 0;
    const EMintEventEnd: u64 = 1;
-   const ELevelPriceInfoNotSet: u64 = 2;
-   const EMaxTotalMintIsReached: u64 = 3;
+   const ELevelInfoNotSet: u64 = 2;
+   const ELevelInfoExists: u64 = 3;
    const EInvalidMaxTotalMint: u64 = 4;
    const EUserAlreadyMinted: u64 = 5;
    const EDueTimeNotValid: u64 = 6;
    const EMaxTotalMintNotGtCurrentMint: u64 = 7;
+   const ENumMustGtZero: u64 = 8;
+   const EMaxTotalMintIsReached: u64 = 9;
+   const ERefPercentInvalid: u64 = 10;
+   
 
-   /// Type that marks the capability to mint new S6kTestNFT's.
+   /// Type that marks the capability to mint new XYZNFT's.
    struct MinterCap has key { id: UID }
 
-    /// Event marking when a S6kTestNFT has been minted
+    /// Event marking when a XYZNFT has been minted
    struct MintNFTEvent has copy, drop {
         // The Object ID of the NFT
         object_id: ID,
@@ -47,16 +54,24 @@ module nonfungible::nft{
    // ======= Types =======
    struct NFT has drop {}
 
-   struct LevelPriceInfo has store, copy, drop {
-     level_name: vector<u8>,
+   struct LevelInfoKey<phantom T> has store, copy, drop {
+     level_name: vector<u8>
+   }
+
+   struct LevelInfoValue<phantom T> has store, copy, drop {
+     mint_price: u64,
+     level_value: u64,
+     next_level_value: u64,
+     next_level_name: vector<u8>,
+     rarity_numerator: u64,
+     rarity_denumerator: u64,
    }
    struct UserInfo has store {
      is_mint: bool
-
      }
 
    /// An example NFT that can be minted by anybody
-   struct S6kTestNFT has key, store {
+   struct XYZNFT has key, store {
         id: UID,
         /// Name for the token
         name: String,
@@ -76,7 +91,8 @@ module nonfungible::nft{
           max_total: u64,
           due_time: u64,
           beneficiary: address,
-          balance: Balance<SUI>
+          balance: Balance<SUI>,
+          mint_ref_percent: FixedPoint32
      }
 
     
@@ -98,14 +114,14 @@ module nonfungible::nft{
 
      let nft_values = vector[
             utf8(b"{name}"),
-            utf8(b"https://s6k.finance"),
+            utf8(b"https://abc.xyz"),
             utf8(b"{image_url}"),
             utf8(b"{description}"),
-            utf8(b"https://s6k.finance"),
+            utf8(b"https://abc.xyz"),
             utf8(b"{creator}"),
         ];
 
-     let nft_display = display::new_with_fields<S6kTestNFT>(
+     let nft_display = display::new_with_fields<XYZNFT>(
             &publisher, nft_keys, nft_values, ctx
         );
      let minting_treasury = MintingTreasury {
@@ -115,6 +131,7 @@ module nonfungible::nft{
             current_mint: 0,
             max_total: U64_MAX,
             due_time: 0,
+            mint_ref_percent: create_from_rational(0, MINT_REF_PERCENT_DENUMERATOR)
      };
 
      display::update_version(&mut nft_display);
@@ -137,11 +154,11 @@ module nonfungible::nft{
       url: Url,
       level: String, 
       ctx: &mut TxContext
-   ): S6kTestNFT {
+   ): XYZNFT {
 
       let sender = tx_context::sender(ctx);
 
-      let nft = S6kTestNFT {
+      let nft = XYZNFT {
          id: object::new(ctx),
          name: name,
          description: description,
@@ -158,20 +175,141 @@ module nonfungible::nft{
       nft
    }
 
-   public fun add_level_price_info(
+   /// Add level price info
+   public fun add_level_price_info<T>(
      _:&MinterCap, 
      treasury: &mut MintingTreasury, 
      mint_price: u64, 
-     level_name: vector<u8>
+     level_name: vector<u8>,
+     level_value: u64,
+     next_level_name: vector<u8>,
+     rarity_numerator: u64,
+     rarity_denumerator: u64,
      ) {
-          field::add(&mut treasury.id, LevelPriceInfo { level_name },  mint_price);
+          assert!(
+               mint_price > 0 && rarity_numerator > 0 && rarity_denumerator > 0 && level_value > 0 && rarity_denumerator >= rarity_numerator, 
+               ENumMustGtZero
+          );
+          assert!(
+               !field::exists_with_type<LevelInfoKey<T>, LevelInfoValue<T>>(
+                    &treasury.id, 
+                    LevelInfoKey<T> { level_name }
+               ), 
+               ELevelInfoExists
+          );
+          field::add(
+               &mut treasury.id, 
+               LevelInfoKey<T>{ level_name },  
+               LevelInfoValue<T>{
+                    level_value,
+                    mint_price,
+                    next_level_name, 
+                    next_level_value: level_value + 1,
+                    rarity_numerator,
+                    rarity_denumerator
+               }
+          );
      }
+
+   /// Edit level price info
+   public fun edit_level_price_info<T>(
+     _:&MinterCap, 
+     minting_treasury: &mut MintingTreasury, 
+     mint_price: u64,
+     level_name: vector<u8>,
+     level_value: u64,
+     next_level_name: vector<u8>,
+     rarity_numerator: u64,
+     rarity_denumerator: u64,
+   ) {
+     assert!(
+          mint_price > 0 && rarity_numerator > 0 && rarity_denumerator > 0 && level_value > 0 && rarity_denumerator >= rarity_numerator,
+          ENumMustGtZero
+     );
+     assert!(
+          field::exists_with_type<LevelInfoKey<T>, LevelInfoValue<T>>(
+               &minting_treasury.id, 
+               LevelInfoKey<T> { level_name }
+          ), 
+          ELevelInfoNotSet
+     );
+     *field::borrow_mut<LevelInfoKey<T>, LevelInfoValue<T>>(&mut minting_treasury.id, LevelInfoKey<T>{ level_name }) = LevelInfoValue<T> { 
+          mint_price,
+          level_value,
+          next_level_name,
+          next_level_value: level_value + 1,
+          rarity_numerator,
+          rarity_denumerator
+     };
+   }
+
+   /// Delete level price info
+   public fun delete_level_price_info<T>(
+     _:&MinterCap, 
+     minting_treasury: &mut MintingTreasury, 
+     level_name: vector<u8>
+   ) {
+     assert!(
+          field::exists_with_type<LevelInfoKey<T>, LevelInfoValue<T>>(
+               &minting_treasury.id, 
+               LevelInfoKey<T> { level_name }
+          ), 
+          ELevelInfoNotSet
+     );
+     field::remove<LevelInfoKey<T>, LevelInfoValue<T>>(&mut minting_treasury.id, LevelInfoKey<T> { level_name });
+   }
+
+   /// Get level price info
+   public fun get_level_price_info<T>(
+     minting_treasury: &MintingTreasury,
+     level_name: vector<u8>
+   ): LevelInfoValue<T> {
+     assert!(
+         field::exists_with_type<LevelInfoKey<T>, LevelInfoValue<T>>(
+               &minting_treasury.id, 
+               LevelInfoKey<T> { level_name }
+          ), 
+          ELevelInfoNotSet 
+     );
+     *field::borrow<LevelInfoKey<T>, LevelInfoValue<T>>(&minting_treasury.id, LevelInfoKey<T>{ level_name })
+   }
+
+   /// Get rarity probability from level info
+   public fun get_level_info_probability<T>( level_info_value: &LevelInfoValue<T> ): FixedPoint32 {
+     create_from_rational(level_info_value.rarity_numerator, level_info_value.rarity_denumerator)
+   }
+
+   /// Get next level name from given nft
+   public fun get_nft_next_level_name<T>(
+     nft: &XYZNFT,
+     minting_treasury: &MintingTreasury
+   ): vector<u8> {
+     let level_price_info = get_level_price_info<T>(minting_treasury, *bytes(&nft.level));
+     level_price_info.next_level_name
+   }
+
+   /// Get next level value from given nft
+   public fun get_nft_next_level_value<T>(
+     nft: &XYZNFT,
+     minting_treasury: &MintingTreasury
+   ): u64 {
+     let level_price_info = get_level_price_info<T>(minting_treasury, *bytes(&nft.level));
+     level_price_info.next_level_value
+   }
+   /// Get level mint price
+   public fun get_level_mint_price<T>(
+     level_info_value: &LevelInfoValue<T>
+   ): u64 {
+     level_info_value.mint_price
+   }
+   
 
    /// Paid public mint to an account
    public fun mint_to_account(
         minting_treasury: &mut MintingTreasury,
         clock: &Clock,
         fee: Coin<SUI>,
+        ref_address: address,
         ctx: &mut TxContext
     ) {
      // Check if not exceed due_time
@@ -181,11 +319,11 @@ module nonfungible::nft{
      );
      // Check if level_one price info exists
      assert!(
-          field::exists_with_type<LevelPriceInfo, u64>(
+          field::exists_with_type<LevelInfoKey<SUI>, LevelInfoValue<SUI>>(
                &minting_treasury.id, 
-               LevelPriceInfo{ level_name : b"level_one" }
+               LevelInfoKey{ level_name : b"level_one" }
           ), 
-          ELevelPriceInfoNotSet
+          ELevelInfoNotSet
      );
      // Check if max_total is reached
      assert!(
@@ -193,10 +331,10 @@ module nonfungible::nft{
          EMaxTotalMintIsReached
      );
      // Take the mint_fee of level_one price info
-     let level_one_mint_fee = *field::borrow(&minting_treasury.id, LevelPriceInfo{ level_name : b"level_one" });
+     let level_one_info = *field::borrow<LevelInfoKey<SUI>, LevelInfoValue<SUI>>(&minting_treasury.id, LevelInfoKey<SUI>{ level_name : b"level_one" });
      // Check if fee is sufficient
      assert!(
-          coin::value(&fee) >= level_one_mint_fee, 
+          coin::value(&fee) >= level_one_info.mint_price, 
           EInsufficientBalance
      );
      let sender = sender(ctx);
@@ -213,9 +351,19 @@ module nonfungible::nft{
      // Convert fee in sui to mutable balance
      let balance = coin::balance_mut<SUI>(&mut fee);
      // Calculate the remain amount
-     let remain_amount = balance::value(balance) - level_one_mint_fee;
+     let remain_amount = balance::value(balance) - level_one_info.mint_price;
+     let treasury_deposit_amount = if(ref_address != @0x0){
+          let ref_amount = multiply_u64(level_one_info.mint_price, minting_treasury.mint_ref_percent);
+          transfer::public_transfer<Coin<SUI>>(
+               coin::take<SUI>(balance, ref_amount, ctx), 
+               ref_address
+          );
+          level_one_info.mint_price - ref_amount
+     } else {
+          level_one_info.mint_price
+     };
      // Add a payment to the minting treasury balance
-     balance::join(&mut minting_treasury.balance, balance::split(balance, level_one_mint_fee));
+     balance::join(&mut minting_treasury.balance, balance::split(balance, treasury_deposit_amount));
      // Convert the remain balance into coin object
      let remain = coin::take<SUI>(balance, remain_amount, ctx);
      // Transfer the changes to the sender
@@ -273,7 +421,7 @@ module nonfungible::nft{
 
    /// Update the `description` of `nft` to `new_description`
    public fun update_description(
-        nft: &mut S6kTestNFT,
+        nft: &mut XYZNFT,
         new_description: vector<u8>,
    
         _: &mut TxContext
@@ -282,8 +430,8 @@ module nonfungible::nft{
    }
 
    /// Permanently delete `nft`
-   public fun burn(nft: S6kTestNFT) {
-        let S6kTestNFT { id, name: _, description: _, image_url: _, creator: _, level: _} = nft;
+   public fun burn(nft: XYZNFT) {
+        let XYZNFT { id, name: _, description: _, image_url: _, creator: _, level: _} = nft;
         object::delete(id)
    }
 
@@ -294,22 +442,22 @@ module nonfungible::nft{
    }
 
    /// Get the NFT's `name`
-   public fun name(nft: &S6kTestNFT): &String {
+   public fun name(nft: &XYZNFT): &String {
         &nft.name
     }
 
    /// Get the NFT's `description`
-   public fun description(nft: &S6kTestNFT): &String {
+   public fun description(nft: &XYZNFT): &String {
         &nft.description    
     }
 
    /// Get the NFT's `url`
-   public fun image_url(nft: &S6kTestNFT): &Url {
+   public fun image_url(nft: &XYZNFT): &Url {
         &nft.image_url
    }
 
    /// Get the NFT's `creator`
-   public fun creator(nft: &S6kTestNFT): &address {
+   public fun creator(nft: &XYZNFT): &address {
         &nft.creator
    }
 
@@ -350,6 +498,47 @@ module nonfungible::nft{
      );
      minting_treasury.due_time = due_timestamp_ms;
    }
+
+   public fun set_mint_ref_percent(
+     _: &MinterCap, 
+     minting_treasury: &mut MintingTreasury,
+     ref_percent: u64
+   ){
+     assert!(
+          ref_percent < MINT_REF_PERCENT_DENUMERATOR && ref_percent > 0, 
+          ERefPercentInvalid
+     );
+     minting_treasury.mint_ref_percent = create_from_rational(ref_percent, MINT_REF_PERCENT_DENUMERATOR);
+   }
+
+   public fun update_nft_to_next_level(
+     nft: XYZNFT,
+     next_level_name: vector<u8>,
+     is_upgradable: bool,
+     ctx: &mut TxContext 
+   ) {
+     let new_level_name = if(is_upgradable) {
+          utf8(next_level_name)
+     } else {
+          nft.level
+     };
+     let new_nft = mint(nft.name, nft.description, nft.image_url, new_level_name, ctx);
+     transfer::transfer(new_nft, tx_context::sender(ctx));
+     burn(nft);
+   }
+
+   public fun get_beneficiary(
+     minting_treasury: &MintingTreasury,
+   ): address {
+     minting_treasury.beneficiary
+   }
+
+   public fun get_nft_id(
+     nft: &XYZNFT
+   ): ID {
+     object::uid_to_inner(&nft.id)
+   }
+
    fun u64_to_str(value: u64): String {
      let buffer = vector::empty<u8>();
      while( value / 10 > 0){
@@ -360,6 +549,7 @@ module nonfungible::nft{
      vector::reverse<u8>(&mut buffer);
      utf8(buffer)
    }
+
    #[test_only] 
    public fun init_for_testing(ctx: &mut TxContext) { init(NFT{}, ctx) } 
 }
