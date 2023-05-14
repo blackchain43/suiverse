@@ -1,78 +1,76 @@
-// Copyright (c) Mysten Labs, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 module version_package::version {
-  use std::ascii;
-  use std::type_name;
-  use sui::address;
-  use sui::hex::{Self};
-  use sui::package::{Self, Publisher};
-  use sui::transfer::{Self};
-  use sui::tx_context::{TxContext};
-  use sui::table::{Self, Table};
-  use sui::object::{Self, UID};
+    use sui::table;
+    use sui::package;
+    use sui::object::UID;
+    use sui::tx_context::TxContext;
+    use sui::transfer;
+    use sui::object;
+    use sui::package::Publisher;
+    use std::ascii;
+    use sui::hex;
+    use sui::address;
+    use std::type_name;
 
-  struct VERSION has drop {}
+    struct VERSION has drop{}
 
-  struct Version has key {
-	  id: UID,
-	  versions: Table<address, u64>
-  }
+    // id 0x940519686e92ae9d33d3b15d76cf49568ed59e33ccd032d1cd853e329f51afdd
+    struct Version has key{
+        id: UID,
+        versions: table::Table<address, u64>
+    }
 
-  fun init(otw: VERSION, ctx: &mut TxContext){
-    package::claim_and_keep(otw, ctx);
-    let version = Version{
-      id: object::new(ctx),
-      versions: table::new<address, u64>(ctx)
-    };
-    transfer::share_object(version);
-  }
+    #[test_only]
+    public fun init_for_test(ctx: &mut TxContext){
+        init(VERSION{}, ctx)
+    }
 
-  public entry fun add(
-    publisher: &Publisher,
-    version: &mut Version,
-  ) {
-    let package_address = address::from_bytes(hex::decode(*ascii::as_bytes(package::published_package(publisher))));
-    table::add<address, u64>(&mut version.versions, package_address, 0);
-  }
-  
-  public entry fun set(
-    publisher: &Publisher,
-    version: &mut Version,
-    value: u64,
-  ) {
-    let package_address = address::from_bytes(hex::decode(*ascii::as_bytes(package::published_package(publisher))));
-    *table::borrow_mut<address, u64>(&mut version.versions, package_address) = value;
-  }
+    fun init(witness:VERSION,ctx: &mut TxContext){
+        package::claim_and_keep(witness,ctx);
+        transfer::share_object(Version{
+            id: object::new(ctx),
+            versions: table::new(ctx)
+        })
+    }
 
-  public fun get_by_T<T>(
-    version: &Version,
-  ): u64 {
-    let ref_version = version;
-    let version_type = type_name::get<T>();
-    let version_type_address = type_name::get_address(&version_type);
-    get(ref_version, address::from_bytes(hex::decode(*ascii::as_bytes(&version_type_address))))
-  }
+    #[test_only]
+    public fun add_for_test(addr: address, global_version : &mut Version){
+        table::add(&mut global_version.versions, addr,0);
+    }
 
-  public fun get(
-    version: &Version,
-    type_address: address,
-  ): u64 {
-    *table::borrow<address, u64>(&version.versions, type_address)
-  }
+    #[test_only]
+    public fun set_for_test(addr: address, global_version : &mut Version, version: u64){
+        *table::borrow_mut(&mut global_version.versions, addr) = version;
+    }
 
-  public fun borrow_mut(
-    publisher: &Publisher,
-    version: &mut Version,
-  ): &mut u64 {
-    let package_address = address::from_bytes(hex::decode(*ascii::as_bytes(package::published_package(publisher))));
-    table::borrow_mut<address, u64>(&mut version.versions, package_address)
-  }
+    #[test_only]
+    public fun borrow_mut_for_test(addr: address, global_version : &mut Version): &mut u64 {
+        table::borrow_mut(&mut global_version.versions, addr)
+    }
 
-  public fun contains(
-    version: &Version,
-    package_address: address,
-  ): bool{
-    table::contains<address, u64>(&version.versions, package_address)
-  }
+    public entry fun add(publisher: &Publisher , global_version : &mut Version) {
+        let addr = address::from_bytes(hex::decode(*ascii::as_bytes(package::published_package(publisher))));
+        table::add(&mut global_version.versions, addr,0);
+    }
+
+    public entry fun set(publisher: &Publisher , global_version : &mut Version, version: u64) {
+        let addr = address::from_bytes(hex::decode(*ascii::as_bytes(package::published_package(publisher))));
+        *table::borrow_mut(&mut global_version.versions, addr) = version;
+    }
+
+    public fun get_by_T<T>(global_version : & Version):u64{
+        get(global_version, address::from_bytes(hex::decode(*ascii::as_bytes(&type_name::get_address(&type_name::get<T>())))))
+    }
+
+    public fun get( global_version : & Version, addr: address): u64 {
+        *table::borrow(& global_version.versions, addr)
+    }
+
+    public fun borrow_mut(publisher: &Publisher , global_version : &mut Version): &mut u64 {
+        let addr = address::from_bytes(hex::decode(*ascii::as_bytes(package::published_package(publisher))));
+        table::borrow_mut(&mut global_version.versions, addr)
+    }
+
+    public fun contains( global_version : & Version, addr: address): bool {
+        table::contains(& global_version.versions, addr)
+    }
 }

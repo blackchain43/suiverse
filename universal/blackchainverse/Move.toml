@@ -1,0 +1,28 @@
+[package]
+name = "BlackchainVerse"
+version = "0.0.1"
+published-at = ""
+upgrade_cap = ""
+shared_publisher = ""
+
+[dependencies.Sui]
+git = "https://github.com/MystenLabs/sui.git"
+subdir = "crates/sui-framework/packages/sui-framework"
+rev = "ae1212baf8f0837e25926d941db3d26a61c1bea2"
+
+[dependencies.Version]
+local = "../version_package"
+
+[dependencies.KioskPolicies]
+local = "../kiosk_policies"
+
+[dependencies.NftProtocol]
+git = "https://github.com/Origin-Byte/nft-protocol.git"
+subdir = "contracts/nft_protocol"
+rev = "6040797431ed63e77dd4501698b96fb6dcc0c229"
+
+
+[addresses]
+blackchainverse =  "0x0"
+sui =  "0000000000000000000000000000000000000000000000000000000000000002"
+nft_protocol = "0xbc3df36be17f27ac98e3c839b2589db8475fa07b20657b08e8891e3aaf5ee5f9"
