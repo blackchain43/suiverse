@@ -1,0 +1,24 @@
+[package]
+name = "OperationCollection"
+version = "0.0.1"
+published-at = ""
+
+[dependencies.Sui]
+git = "https://github.com/MystenLabs/sui.git"
+subdir = "crates/sui-framework/packages/sui-framework"
+rev = "ae1212baf8f0837e25926d941db3d26a61c1bea2"
+
+[dependencies.BlackchainVerse]
+local = "../blackchainverse"
+
+[dependencies.Version]
+local = "../version_package"
+
+[dependencies.NftProtocol]
+git = "https://github.com/Origin-Byte/nft-protocol.git"
+subdir = "contracts/nft_protocol"
+rev = "6040797431ed63e77dd4501698b96fb6dcc0c229"
+
+[addresses]
+operation =  "0x0"
+sui = "0x2"

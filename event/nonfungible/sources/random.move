@@ -1,4 +1,4 @@
-module governance::random {
+module nonfungible::random {
     use std::hash;
     use std::vector;
     use std::bcs;

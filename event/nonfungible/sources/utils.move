@@ -1,4 +1,4 @@
-module governance::utils {
+module nonfungible::utils {
   use std::type_name;
   use std::ascii;
   const MAX_U_128: u256 = 1340282366920938463463374607431768211455;

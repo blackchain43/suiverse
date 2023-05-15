@@ -17,6 +17,8 @@ module nonfungible::nft{
    use sui::url::{Self, Url};
    use sui::clock::{Self, Clock};
    use sui::dynamic_field as field;
+  
+   friend nonfungible::factory;
 
    const U64_MAX: u64 = 18446744073709551615;
    const MIN_OF_MAX_TOTAL_MINTS: u64 = 1;
@@ -36,6 +38,7 @@ module nonfungible::nft{
    const ENumMustGtZero: u64 = 8;
    const EMaxTotalMintIsReached: u64 = 9;
    const ERefPercentInvalid: u64 = 10;
+   const ENotAllowSelfRef: u64 = 11;
    
 
    /// Type that marks the capability to mint new XYZNFT's.
@@ -176,7 +179,7 @@ module nonfungible::nft{
    }
 
    /// Add level price info
-   public fun add_level_price_info<T>(
+   public(friend) fun add_level_price_info<T>(
      _:&MinterCap, 
      treasury: &mut MintingTreasury, 
      mint_price: u64, 
@@ -212,7 +215,7 @@ module nonfungible::nft{
      }
 
    /// Edit level price info
-   public fun edit_level_price_info<T>(
+   public(friend) fun edit_level_price_info<T>(
      _:&MinterCap, 
      minting_treasury: &mut MintingTreasury, 
      mint_price: u64,
@@ -244,7 +247,7 @@ module nonfungible::nft{
    }
 
    /// Delete level price info
-   public fun delete_level_price_info<T>(
+   public(friend) fun delete_level_price_info<T>(
      _:&MinterCap, 
      minting_treasury: &mut MintingTreasury, 
      level_name: vector<u8>
@@ -305,7 +308,7 @@ module nonfungible::nft{
    
 
    /// Paid public mint to an account
-   public fun mint_to_account(
+   public(friend) fun mint_to_account(
         minting_treasury: &mut MintingTreasury,
         clock: &Clock,
         fee: Coin<SUI>,
@@ -330,6 +333,8 @@ module nonfungible::nft{
          minting_treasury.max_total > minting_treasury.current_mint,
          EMaxTotalMintIsReached
      );
+     let sender = sender(ctx);
+     assert!(sender != ref_address, ENotAllowSelfRef);
      // Take the mint_fee of level_one price info
      let level_one_info = *field::borrow<LevelInfoKey<SUI>, LevelInfoValue<SUI>>(&minting_treasury.id, LevelInfoKey<SUI>{ level_name : b"level_one" });
      // Check if fee is sufficient
@@ -337,7 +342,7 @@ module nonfungible::nft{
           coin::value(&fee) >= level_one_info.mint_price, 
           EInsufficientBalance
      );
-     let sender = sender(ctx);
+     
      // Check for the existence the dynamic field for user info, if not then create with is_mint: false else assert
      if(!field::exists_with_type<address, UserInfo>(&minting_treasury.id, sender)){
           field::add<address, UserInfo>(
@@ -352,7 +357,7 @@ module nonfungible::nft{
      let balance = coin::balance_mut<SUI>(&mut fee);
      // Calculate the remain amount
      let remain_amount = balance::value(balance) - level_one_info.mint_price;
-     let treasury_deposit_amount = if(ref_address != @0x0){
+     let treasury_deposit_amount = if(ref_address != @zero_ref){
           let ref_amount = multiply_u64(level_one_info.mint_price, minting_treasury.mint_ref_percent);
           transfer::public_transfer<Coin<SUI>>(
                coin::take<SUI>(balance, ref_amount, ctx), 
@@ -388,25 +393,59 @@ module nonfungible::nft{
      coin::destroy_zero(fee);
    }
 
-   /// Privileged mint a S6kTestNFT to an account 
-   public fun owner_mint_to_account(
-      _: &MinterCap,
-      name: vector<u8>,
-      description: vector<u8>,
-      url: vector<u8>,
-      receipient: address,
-      level: vector<u8>,
+   /// Free mint a XYZNFT to an account 
+   public(friend) fun free_mint_to_account(
+      minting_treasury: &mut MintingTreasury,
+      clock: &Clock,
       ctx: &mut TxContext
     ) {
-      let nft = mint(
-          utf8(name), 
-          utf8(description), 
-          url::new_unsafe_from_bytes(url), 
-          utf8(level), 
+     // Check if not exceed due_time
+     assert!(
+          clock::timestamp_ms(clock) <= minting_treasury.due_time, 
+          EMintEventEnd
+     );
+     // Check if level_one price info exists
+     assert!(
+          field::exists_with_type<LevelInfoKey<SUI>, LevelInfoValue<SUI>>(
+               &minting_treasury.id, 
+               LevelInfoKey{ level_name : b"level_one" }
+          ), 
+          ELevelInfoNotSet
+     );
+     // Check if max_total is reached
+     assert!(
+         minting_treasury.max_total > minting_treasury.current_mint,
+         EMaxTotalMintIsReached
+     );
+     let sender = sender(ctx);
+     // Check for the existence the dynamic field for user info, if not then create with is_mint: false else assert
+     if(!field::exists_with_type<address, UserInfo>(&minting_treasury.id, sender)){
+          field::add<address, UserInfo>(
+               &mut minting_treasury.id, 
+               sender, 
+               UserInfo {is_mint: false}
+          );
+     };
+     let user_info = field::borrow_mut<address, UserInfo>(&mut minting_treasury.id, sender); 
+     assert!(!user_info.is_mint, EUserAlreadyMinted);
+     // Mint the NFT
+     let token_name = utf8(TOKEN_NAME_PREFIX);
+     let token_id = u64_to_str(minting_treasury.current_mint + 1);
+     string::append(&mut token_name, token_id);
+     let nft = mint(
+          token_name, 
+          utf8(TOKEN_DESCRIPTION), 
+          url::new_unsafe_from_bytes(TOKEN_URL), 
+          utf8(b"level_one"), 
           ctx
      );
-      transfer::transfer(nft, receipient);
+     // Transfer the NFT to sender
+     transfer::transfer(nft, sender);
+     // Increase the current_mint to 1
+     minting_treasury.current_mint = minting_treasury.current_mint + 1;
+     user_info.is_mint = true;
    }
+
    /// Withdraw SUI in MintingTreasury
    public entry fun collect_profits(
         _: &MinterCap,
@@ -423,7 +462,6 @@ module nonfungible::nft{
    public fun update_description(
         nft: &mut XYZNFT,
         new_description: vector<u8>,
-   
         _: &mut TxContext
    ) {
         nft.description = utf8(new_description)
@@ -462,7 +500,7 @@ module nonfungible::nft{
    }
 
    /// Transfer minter cap
-   public fun transfer_minter_cap(
+   public(friend) fun transfer_minter_cap(
      cap: MinterCap, 
      minting_treasury: &mut MintingTreasury, 
      ctx: &mut TxContext
@@ -473,7 +511,7 @@ module nonfungible::nft{
    }
 
    /// Set the max total nft available for minting
-   public fun set_max_total_mints(
+   public(friend) fun set_max_total_mints(
      _: &MinterCap, 
      minting_treasury: &mut MintingTreasury, 
      max_total: u64
@@ -487,7 +525,7 @@ module nonfungible::nft{
      minting_treasury.max_total = max_total;
    }
 
-   public fun set_due_time(
+   public(friend) fun set_due_time(
      _: &MinterCap, 
      minting_treasury: &mut MintingTreasury,
      clock: &Clock, 
@@ -499,7 +537,7 @@ module nonfungible::nft{
      minting_treasury.due_time = due_timestamp_ms;
    }
 
-   public fun set_mint_ref_percent(
+   public(friend) fun set_mint_ref_percent(
      _: &MinterCap, 
      minting_treasury: &mut MintingTreasury,
      ref_percent: u64

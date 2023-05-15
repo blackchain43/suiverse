@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-module governance::factory {
+module nonfungible::factory {
     // Imports
     use sui::tx_context::{ Self, TxContext };
     use sui::clock::{ Clock };
@@ -10,14 +10,16 @@ module governance::factory {
     use sui::balance;
     use sui::transfer;
     use sui::object::{ Self, ID };
-    use governance::random;
+    use nonfungible::random;
     use nonfungible::nft::{ Self, MintingTreasury, MinterCap, XYZNFT };
     use sui::event;
     use std::string::{ String, utf8 };
+    use whitelist_package::whitelist::{ Self, WhitelistStorage };
 
 
     // Constants
     const EInsufficientBalance: u64 = 0;
+    const ENotInWhitelist: u64 = 1;
 
     // Events
     struct UpgradeEvent<phantom T> has drop, copy {
@@ -175,5 +177,17 @@ module governance::factory {
         object::delete(uid);
         // Destroy zero paid balance
         coin::destroy_zero(paid);
+    }
+    public entry fun mint_with_whitelist(
+        whitelist: &WhitelistStorage,
+        treasury: &mut MintingTreasury,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        assert!(
+            whitelist::is_whitelist(whitelist, tx_context::sender(ctx), ctx),
+            ENotInWhitelist
+        );
+        nft::free_mint_to_account(treasury, clock, ctx);
     }
 }
