@@ -1,11 +1,14 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 module market_package::marketplace {
   use std::fixed_point32;
   use sui::balance::{Self, Balance};
   use sui::coin::{Self, Coin};
   use sui::transfer;
   use sui::tx_context::{Self, TxContext};
-  use sui::object::{Self, UID, ID};
-  use version_package::version::{Self, Version};
+  use sui::object::{Self, UID };
+  use version_package::version::{ Version };
   use market_package::utils;
 
   const EBeneficiaryOrVersionNotMatch: u64 = 1;

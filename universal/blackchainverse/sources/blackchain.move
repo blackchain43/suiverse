@@ -21,8 +21,6 @@ module blackchainverse::blackchain {
   use sui::transfer::{public_share_object, public_transfer};
   use kiosk_policies::royalty_rule;
 
-  /// Constants
-  const PUBLISHER: address = @0xff29c1854f97ddd25745959f692e5544f907cd974a3e249f0dabed21173acbed;
 
   /// Error codes
   const ENotAdmin: u64 = 0;
@@ -111,7 +109,7 @@ module blackchainverse::blackchain {
     new_version: u64,
     ctx: &mut TxContext
   ) {
-    assert!(tx_context::sender(ctx) == PUBLISHER, ENotAdmin);
+    assert!(tx_context::sender(ctx) == @admin, ENotAdmin);
     version::set(publisher_borrow(shared_publisher), version, new_version);
   }
 
@@ -120,7 +118,7 @@ module blackchainverse::blackchain {
     version: &mut Version,
     ctx: &mut TxContext
   ) {
-    assert!(tx_context::sender(ctx) == PUBLISHER, ENotAdmin);
+    assert!(tx_context::sender(ctx) == @admin, ENotAdmin);
     version::add(publisher_borrow(shared_publisher), version);
   }
 
