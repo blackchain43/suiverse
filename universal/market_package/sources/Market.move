@@ -208,7 +208,7 @@ module market_package::market {
   ): Coin<SUI> {
     utils::check_version(version);
     assert!(buy_price == listing.price, EInvalidPrice);
-    assert!(!listing.does_royalty, EDoNotHaveRoyalty);
+    assert!(listing.does_royalty, EDoNotHaveRoyalty);
     let seller = listing.seller;
     let sender = sender(ctx);
     assert!(seller != sender, ESenderIsNotAllowed);

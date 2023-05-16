@@ -11,10 +11,10 @@ module nonfungible::factory {
     use sui::transfer;
     use sui::object::{ Self, ID };
     use nonfungible::random;
+    use nonfungible::whitelist::{ Self, WhitelistStorage };
     use nonfungible::nft::{ Self, MintingTreasury, MinterCap, XYZNFT };
     use sui::event;
     use std::string::{ String, utf8 };
-    use whitelist_package::whitelist::{ Self, WhitelistStorage };
 
 
     // Constants
@@ -189,5 +189,48 @@ module nonfungible::factory {
             ENotInWhitelist
         );
         nft::free_mint_to_account(treasury, clock, ctx);
+    }
+    public entry fun deposit_to_ref_pool(
+        cap: &MinterCap, 
+        treasury: &mut MintingTreasury,
+        deposit: Coin<SUI>,
+        _ctx: &mut TxContext
+    ) {
+        nft::deposit_to_ref_pool(cap, treasury, deposit);
+    }
+
+    public entry fun start_mint_pool(
+        cap: &MinterCap, 
+        treasury: &mut MintingTreasury,
+        mint_price: u64,
+        max_total: u64, 
+        clock: &Clock,
+        due_timestamp_ms: u64,
+        ref_percent: u64,
+        deposit: Coin<SUI>,
+        _ctx: &mut TxContext
+    ) {
+        nft::add_level_price_info<SUI>(
+            cap, 
+            treasury, 
+            mint_price, 
+            b"level_one", 
+            1, 
+            b"level_two", 
+            1000, 
+            1000
+        );
+        nft::set_max_total_mints(cap, treasury, max_total);
+        nft::set_due_time(cap, treasury, clock, due_timestamp_ms);
+        nft::set_mint_ref_percent(cap, treasury, ref_percent);
+        nft::deposit_to_ref_pool(cap, treasury, deposit);
+    }
+    public entry fun collect_profits(
+        cap: &MinterCap, 
+        treasury: &mut MintingTreasury,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ){
+        nft::collect_profits(cap, treasury, clock, ctx);
     }
 }

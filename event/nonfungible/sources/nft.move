@@ -39,6 +39,7 @@ module nonfungible::nft{
    const EMaxTotalMintIsReached: u64 = 9;
    const ERefPercentInvalid: u64 = 10;
    const ENotAllowSelfRef: u64 = 11;
+   const ENotAdmin: u64 = 12;
    
 
    /// Type that marks the capability to mint new XYZNFT's.
@@ -87,16 +88,17 @@ module nonfungible::nft{
         /// Level of the NFT
         level: String,
     }
-    
-    struct MintingTreasury has store, key {
-          id: UID,
-          current_mint: u64,
-          max_total: u64,
-          due_time: u64,
-          beneficiary: address,
-          balance: Balance<SUI>,
-          mint_ref_percent: FixedPoint32
-     }
+
+   struct MintingTreasury has store, key {
+     id: UID,
+     current_mint: u64,
+     max_total: u64,
+     due_time: u64,
+     beneficiary: address,
+     balance: Balance<SUI>,
+     mint_ref_percent: FixedPoint32,
+     ref_pool_balance: Balance<SUI>,
+   }
 
     
    
@@ -134,7 +136,8 @@ module nonfungible::nft{
             current_mint: 0,
             max_total: U64_MAX,
             due_time: 0,
-            mint_ref_percent: create_from_rational(0, MINT_REF_PERCENT_DENUMERATOR)
+            mint_ref_percent: create_from_rational(0, MINT_REF_PERCENT_DENUMERATOR),
+            ref_pool_balance: balance::zero<SUI>()
      };
 
      display::update_version(&mut nft_display);
@@ -357,18 +360,15 @@ module nonfungible::nft{
      let balance = coin::balance_mut<SUI>(&mut fee);
      // Calculate the remain amount
      let remain_amount = balance::value(balance) - level_one_info.mint_price;
-     let treasury_deposit_amount = if(ref_address != @zero_ref){
-          let ref_amount = multiply_u64(level_one_info.mint_price, minting_treasury.mint_ref_percent);
+     let ref_amount = multiply_u64(level_one_info.mint_price, minting_treasury.mint_ref_percent);
+     if(ref_address != @zero_ref && balance::value(&minting_treasury.ref_pool_balance) >= ref_amount){
           transfer::public_transfer<Coin<SUI>>(
-               coin::take<SUI>(balance, ref_amount, ctx), 
+               coin::take<SUI>(&mut minting_treasury.ref_pool_balance, ref_amount, ctx), 
                ref_address
           );
-          level_one_info.mint_price - ref_amount
-     } else {
-          level_one_info.mint_price
      };
      // Add a payment to the minting treasury balance
-     balance::join(&mut minting_treasury.balance, balance::split(balance, treasury_deposit_amount));
+     balance::join(&mut minting_treasury.balance, balance::split(balance, level_one_info.mint_price));
      // Convert the remain balance into coin object
      let remain = coin::take<SUI>(balance, remain_amount, ctx);
      // Transfer the changes to the sender
@@ -447,15 +447,26 @@ module nonfungible::nft{
    }
 
    /// Withdraw SUI in MintingTreasury
-   public entry fun collect_profits(
+   public(friend) fun collect_profits(
         _: &MinterCap,
         mintingtreasury: &mut MintingTreasury,
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
-      let amount = balance::value(&mintingtreasury.balance);
-      let profits = coin::take(&mut mintingtreasury.balance, amount, ctx);
-
-      transfer::public_transfer(profits, tx_context::sender(ctx))
+     let sender = tx_context::sender(ctx);
+     assert!(mintingtreasury.beneficiary == sender, ENotAdmin);
+     let amount = balance::value(&mintingtreasury.balance);
+     let profits = coin::take(&mut mintingtreasury.balance, amount, ctx);
+     // if ref_pool_balance is not zero, then transfer to sender
+     let ref_pool_balance_amount = balance::value(&mintingtreasury.ref_pool_balance);
+     if(
+          ref_pool_balance_amount > 0 && 
+          clock::timestamp_ms(clock) > mintingtreasury.due_time
+     ){
+          let ref_pool_balance = coin::take(&mut mintingtreasury.ref_pool_balance, ref_pool_balance_amount, ctx);
+          transfer::public_transfer(ref_pool_balance, sender);
+     };
+     transfer::public_transfer(profits, sender);
     }
 
    /// Update the `description` of `nft` to `new_description`
@@ -547,6 +558,13 @@ module nonfungible::nft{
           ERefPercentInvalid
      );
      minting_treasury.mint_ref_percent = create_from_rational(ref_percent, MINT_REF_PERCENT_DENUMERATOR);
+   }
+   public(friend) fun deposit_to_ref_pool(
+     _: &MinterCap, 
+     minting_treasury: &mut MintingTreasury,
+     deposit: Coin<SUI>
+   ){
+     balance::join(&mut minting_treasury.ref_pool_balance, coin::into_balance(deposit));
    }
 
    public fun update_nft_to_next_level(

@@ -1,3 +1,6 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 module nonfungible::utils {
   use std::type_name;
   use std::ascii;

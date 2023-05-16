@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-module whitelist_package::whitelist {
+module nonfungible::whitelist {
 
     use sui::object::{Self, UID};
     use sui::tx_context::{Self, TxContext};
@@ -14,14 +14,10 @@ module whitelist_package::whitelist {
 
     struct AdminCap has key { id: UID }
 
-	struct Account has store, drop, copy {
-		amount: u64,
-		claimed: bool
-	}
 
     struct WhitelistStorage has key { 
         id: UID,
-        accounts: VecMap<address, Account>
+        accounts: VecMap<address, bool>
     }
 
     fun init(ctx: &mut TxContext){
@@ -42,18 +38,17 @@ module whitelist_package::whitelist {
         _: &AdminCap, 
 		storage: &mut WhitelistStorage, 
         wallet: address,
-		amount: u64,
         _ctx: &mut TxContext
     ) 
     {
         assert!(
             !vec_map::contains(&storage.accounts, &wallet), ERROR_ADDRESS_IN_WHITELIST
         );
-        vec_map::insert(&mut storage.accounts, wallet, Account { amount: amount, claimed: false });
+        vec_map::insert(&mut storage.accounts, wallet, true);
     }
 
 
-    public entry fun remove_whitelist(
+    public entry fun hard_remove_whitelist(
        _: &AdminCap, 
        storage: &mut WhitelistStorage, 
        wallet: address,
@@ -67,52 +62,32 @@ module whitelist_package::whitelist {
         vec_map::remove(&mut storage.accounts, &wallet);
     }
 
+    public entry fun soft_remove_whitelist(
+       _: &AdminCap, 
+       storage: &mut WhitelistStorage, 
+       wallet: address,
+       _ctx: &mut TxContext, 
+    )
+    {
+        // Check if the wallet address is already in the whitelist
+        assert!(
+            vec_map::contains(&storage.accounts, &wallet), ERROR_ADDRESS_NOT_IN_WHITELIST
+        );
+        let whitelist_status = vec_map::get_mut(&mut storage.accounts, &wallet);
+        *whitelist_status = false;
+    }
+
     public fun is_whitelist(
         storage: &WhitelistStorage, 
         wallet: address,
         _ctx: &mut TxContext, 
     ): bool
     {
-        vec_map::contains(&storage.accounts, &wallet)
+        let result = if(vec_map::contains(&storage.accounts, &wallet)){
+            *vec_map::get(&storage.accounts, &wallet)
+        } else {
+            false
+        };
+        result
     }
-
-	public fun get_whitelist(
-        storage: &mut WhitelistStorage,
-		wallet: address,
-        _ctx: &mut TxContext, 
-    ): &Account
-    {
-		assert!(
-            vec_map::contains(&storage.accounts, &wallet), ERROR_ADDRESS_NOT_IN_WHITELIST
-        );
-    	let account = vec_map::get_mut(&mut storage.accounts, &wallet);
-		account
-	}
-
-	public fun is_claimed(
-        storage: &WhitelistStorage,
-		wallet: address,
-        _ctx: &mut TxContext, 
-    ): bool
-    {
-		assert!(
-            vec_map::contains(&storage.accounts, &wallet), ERROR_ADDRESS_NOT_IN_WHITELIST
-        );
-    	let account = vec_map::get(&storage.accounts, &wallet);
-		account.claimed
-    }
-
-	public fun set_claim(
-        storage: &mut WhitelistStorage,
-		wallet: address,
-        _ctx: &mut TxContext, 
-    )
-    {
-		assert!(
-            vec_map::contains(&storage.accounts, &wallet), ERROR_ADDRESS_NOT_IN_WHITELIST
-        );
-    	let account = vec_map::get_mut(&mut storage.accounts, &wallet);
-		account.claimed = true;
-    }
-
 }

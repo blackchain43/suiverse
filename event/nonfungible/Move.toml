@@ -2,21 +2,18 @@
 name = "Nonfungible"
 version = "0.0.1"
 # published-at="0x9451aa42ead201cdf34ec688e7b1b5facdd4bdc3eea3576e86ce4f17918ed22c" // Testnet
-published-at = ""
-upgrade_cap = ""
-shared_publisher = ""
+# published-at = ""
+# upgrade_cap = ""
+# shared_publisher = ""
 
 [dependencies.Sui]
 git = "https://github.com/MystenLabs/sui.git"
 subdir = "crates/sui-framework/packages/sui-framework"
-rev = "ae1212baf8f0837e25926d941db3d26a61c1bea2"
-
-[dependencies.Whitelist]
-local = "../whitelist_package"
+rev = "testnet"
 
 
 
 [addresses]
 nonfungible = "0x0"
 sui =  "0000000000000000000000000000000000000000000000000000000000000002"
-zero_ref = "0x10"
+zero_ref = "0000000000000000000000000000000000000000000000000000000000000010"
