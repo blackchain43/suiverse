@@ -1,0 +1,15 @@
+[package]
+name = "Extension"
+version = "0.0.1"
+# published-at = ""
+
+[dependencies.Sui]
+git = "https://github.com/MystenLabs/sui.git"
+subdir = "crates/sui-framework/packages/sui-framework"
+rev = "ae1212baf8f0837e25926d941db3d26a61c1bea2"
+
+
+[addresses]
+extension =  "0x0"
+sui =  "0x2"
+admin = "0x715fed4d3dadd2587daae0844185e6d72d48e212d8718e4e766130d0adfa3849"

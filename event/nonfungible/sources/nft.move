@@ -22,9 +22,9 @@ module nonfungible::nft{
 
    const U64_MAX: u64 = 18446744073709551615;
    const MIN_OF_MAX_TOTAL_MINTS: u64 = 1;
-   const TOKEN_NAME_PREFIX: vector<u8> = b"XWorry NFT #";
-   const TOKEN_URL: vector<u8> = b"https://img-08.stickers.cloud/packs/787053f4-0bd6-45f0-9a58-715b54913177/webp/ce810738-214d-4b3b-ab2f-aead08c5f7f8.webp";
-   const TOKEN_DESCRIPTION: vector<u8>  = b"$XWORRY The biggest airdrop on SUI mainnet";
+   const TOKEN_NAME_PREFIX: vector<u8> = b"FLORENTINO NFT #";
+   const TOKEN_URL: vector<u8> = b"https://lienquan.garena.vn/files/skin/62cda115a78344fc4fa5154881c9da255c25f64ee32a7.jpg";
+   const TOKEN_DESCRIPTION: vector<u8>  = b"MY TEST NFT FLORENTINO";
    const MINT_REF_PERCENT_DENUMERATOR: u64 = 1000;
 
    const EInsufficientBalance: u64 = 0;
@@ -53,6 +53,8 @@ module nonfungible::nft{
         creator: address,
         // The name of the NFT
         name: String,
+        // Ref address
+        ref_address: address,
     }
 
    // ======= Types =======
@@ -119,10 +121,10 @@ module nonfungible::nft{
 
      let nft_values = vector[
             utf8(b"{name}"),
-            utf8(b"https://abc.xyz"),
+            utf8(b"https://lienquan.garena.vn"),
             utf8(b"{image_url}"),
             utf8(b"{description}"),
-            utf8(b"https://abc.xyz"),
+            utf8(b"https://lienquan.garena.vn"),
             utf8(b"{creator}"),
         ];
 
@@ -158,7 +160,8 @@ module nonfungible::nft{
       name: String, 
       description: String, 
       url: Url,
-      level: String, 
+      level: String,
+      ref_address: address, 
       ctx: &mut TxContext
    ): XYZNFT {
 
@@ -177,6 +180,7 @@ module nonfungible::nft{
          object_id: object::uid_to_inner(&nft.id),
          creator: sender,
          name: nft.name,
+         ref_address
       });
       nft
    }
@@ -381,7 +385,8 @@ module nonfungible::nft{
           token_name, 
           utf8(TOKEN_DESCRIPTION), 
           url::new_unsafe_from_bytes(TOKEN_URL), 
-          utf8(b"level_one"), 
+          utf8(b"level_one"),
+          ref_address, 
           ctx
      );
      // Transfer the NFT to sender
@@ -436,7 +441,8 @@ module nonfungible::nft{
           token_name, 
           utf8(TOKEN_DESCRIPTION), 
           url::new_unsafe_from_bytes(TOKEN_URL), 
-          utf8(b"level_one"), 
+          utf8(b"level_one"),
+          @zero_ref, 
           ctx
      );
      // Transfer the NFT to sender
@@ -578,7 +584,7 @@ module nonfungible::nft{
      } else {
           nft.level
      };
-     let new_nft = mint(nft.name, nft.description, nft.image_url, new_level_name, ctx);
+     let new_nft = mint(nft.name, nft.description, nft.image_url, new_level_name, @zero_ref, ctx);
      transfer::transfer(new_nft, tx_context::sender(ctx));
      burn(nft);
    }

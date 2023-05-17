@@ -2,23 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
 module blackchainverse::blackchain {
+  use std::string::{utf8, String};
   use std::vector;
   use sui::address;
   use sui::package;
   use sui::transfer;
   use sui::object::{Self, UID};
-  use std::string::{utf8, String};
+  use sui::transfer_policy;
+  use sui::transfer::{public_share_object, public_transfer};
   use sui::vec_map::{Self, VecMap};
   use sui::display::{Self, Display};
   use sui::tx_context::{TxContext};
-  use blackchainverse::utils::{check_version, from_same_package};
-  use version_package::version::Version;
   use sui::package::Publisher;
   use sui::tx_context;
-  use version_package::version;
+  use blackchainverse::utils::{check_version, from_same_package};
+  use version_package::version::{ Self, Version };
   use nft_protocol::mint_cap::MintCap;
-  use sui::transfer_policy;
-  use sui::transfer::{public_share_object, public_transfer};
   use kiosk_policies::royalty_rule;
 
 

@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-module market_package::utils {
+module market_package::util {
   use std::ascii;
   use std::type_name;
   use sui::address;

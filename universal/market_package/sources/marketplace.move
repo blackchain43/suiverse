@@ -9,7 +9,7 @@ module market_package::marketplace {
   use sui::tx_context::{Self, TxContext};
   use sui::object::{Self, UID };
   use version_package::version::{ Version };
-  use market_package::utils;
+  use market_package::util;
 
   const EBeneficiaryOrVersionNotMatch: u64 = 1;
   struct MarketPlace<phantom T> has store, key{
@@ -46,7 +46,7 @@ module market_package::marketplace {
   } 
 
   public fun withdraw_profit<T>(version: &Version, marketplace: &mut MarketPlace<T>, amount: u64, ctx: &mut TxContext): Coin<T> {
-    utils::check_version(version);
+    util::check_version(version);
     assert!(tx_context::sender(ctx) == marketplace.beneficiary, EBeneficiaryOrVersionNotMatch);
     coin::from_balance<T>(
       balance::split(&mut marketplace.profit, amount), 

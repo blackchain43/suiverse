@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 module market_package::market {
-  use market_package::marketplace::{ Self, MarketPlace };
-  use market_package::utils;
-  use kiosk_policies::royalty_rule;
   use sui::balance;
   use sui::coin::{ Self, Coin };
   use sui::dynamic_field;
@@ -15,6 +12,10 @@ module market_package::market {
   use sui::transfer_policy::{ Self, TransferPolicy };
   use sui::tx_context::{ TxContext, sender };
   use version_package::version::{ Version };
+  use market_package::marketplace::{ Self, MarketPlace };
+  use market_package::util;
+  use kiosk_policies::royalty_rule;
+  use extension::extension::{ Self, Extension };
 
   const EDoNotHaveRoyalty: u64 = 0;
   const EInvalidPrice: u64 = 1;
@@ -70,7 +71,7 @@ module market_package::market {
     does_royalty: bool, 
     ctx: &mut TxContext
   ) {
-    utils::check_version(version);
+    util::check_version(version);
     assert!(listing_price > 0, EInvalidPrice);
     let nft_id = *object::borrow_id<T1>(&nft);
     let market_id = *object::borrow_id<MarketPlace<T2>>(marketplace);
@@ -106,7 +107,7 @@ module market_package::market {
     listing: &mut Listing<T2>,
     ctx: &mut TxContext
   ){
-    utils::check_version(version);
+    util::check_version(version);
     assert!(sender(ctx) == listing.seller, ESenderIsNotAllowed);
     let seller = listing.seller;
     transfer::public_transfer(
@@ -134,7 +135,7 @@ module market_package::market {
     paid: Coin<T2>,
     ctx: &mut TxContext
   ): Coin<T2> {
-    utils::check_version(version);
+    util::check_version(version);
     assert!(!listing.does_royalty, EDoNotHaveRoyalty);
     assert!(buy_price == listing.price, EInvalidPrice);
     let seller = listing.seller;
@@ -181,7 +182,7 @@ module market_package::market {
     paid: Coin<T2>,
     _ctx: &mut TxContext
   ): Coin<T2> {
-    utils::check_version(version);
+    util::check_version(version);
     paid
   }
 
@@ -193,7 +194,7 @@ module market_package::market {
     paid_with_sui: Coin<SUI>,
     _ctx: &mut TxContext
   ): Coin<SUI> {
-    utils::check_version(version);
+    util::check_version(version);
     paid_with_sui
   }
 
@@ -206,7 +207,7 @@ module market_package::market {
     paid_with_sui: Coin<SUI>,
     ctx: &mut TxContext
   ): Coin<SUI> {
-    utils::check_version(version);
+    util::check_version(version);
     assert!(buy_price == listing.price, EInvalidPrice);
     assert!(listing.does_royalty, EDoNotHaveRoyalty);
     let seller = listing.seller;
@@ -276,7 +277,7 @@ module market_package::market {
     new_price: u64,
     ctx: &mut TxContext
   ) {
-    utils::check_version(version);
+    util::check_version(version);
     let sender = sender(ctx);
     assert!( sender == listing.seller, ESenderIsNotAllowed);
     assert!( new_price > 0, EInvalidPrice);
@@ -297,6 +298,148 @@ module market_package::market {
     );
   }
 
+  public fun buy_generic_with_ext<T1: store + key, T2>(
+    version: &Version, 
+    extension: &Extension, 
+    listing: &mut Listing<T2>, 
+    buy_price: u64, 
+    marketplace: &mut MarketPlace<T2>, 
+    paid: Coin<T2>, 
+    ctx: &mut TxContext
+  ): Coin<T2>{
+    util::check_version(version);
+    assert!(!listing.does_royalty, EDoNotHaveRoyalty);
+    assert!(buy_price == listing.price, EInvalidPrice);
+    let seller = listing.seller;
+    let sender = sender(ctx);
+    assert!(seller != sender, ESenderIsNotAllowed);
+    let balance = coin::balance_mut<T2>(&mut paid);
+    let market_fee = marketplace::calc_market_fee<T2>(marketplace, listing.price);
+    marketplace::deposit_profit<T2>(
+      marketplace,
+      balance::split<T2>(
+        balance,
+        market_fee
+      )
+    );
+    let (is_taxed, tax_amount, tax_receiver) = extension::calc_tax<T1>(extension, buy_price);
+    if(is_taxed){
+      transfer::public_transfer<Coin<T2>>(
+        coin::take<T2>(balance, tax_amount, ctx),
+        tax_receiver
+      );
+    };
+    transfer::public_transfer<Coin<T2>>(
+      coin::take<T2>(
+        balance,
+        listing.price - market_fee - tax_amount,
+        ctx
+      ),
+      seller
+    );
+    transfer::public_transfer<T1>(
+      dynamic_field::remove<Item, T1>(
+        &mut listing.id, 
+        Item { id: listing.nft}
+      ),
+      sender
+    );
+    event::emit(
+      BuyEvent<T2> {
+        seller,
+        buyer: sender,
+        listing_id: *object::borrow_id<Listing<T2>>(listing),
+        nft_id: listing.nft,
+        marketplace: listing.market_id,
+        price: listing.price
+      }
+    );
+    paid
+  }
 
+  public fun buy_with_sui_with_ext<T: store + key>(
+    version: &Version, 
+    extension: &Extension,
+    policy: &mut TransferPolicy<T>,
+    listing: &mut Listing<SUI>,
+    buy_price: u64,
+    marketplace: &mut MarketPlace<SUI>,
+    paid_with_sui: Coin<SUI>,
+    ctx: &mut TxContext
+  ): Coin<SUI> {
+    util::check_version(version);
+    assert!(buy_price == listing.price, EInvalidPrice);
+    assert!(listing.does_royalty, EDoNotHaveRoyalty);
+    let seller = listing.seller;
+    let sender = sender(ctx);
+    assert!(seller != sender, ESenderIsNotAllowed);
+    let origin_balance = coin::balance_mut<SUI>(&mut paid_with_sui);
+    let market_fee = marketplace::calc_market_fee<SUI>(marketplace, listing.price);
+    
+    marketplace::deposit_profit<SUI>(
+      marketplace,
+      balance::split<SUI>(
+        origin_balance,
+        market_fee
+      )
+    );
+    let (is_taxed, tax_amount, tax_receiver) = extension::calc_tax<T>(extension, buy_price);
+    let other_fee = if(is_taxed){
+      transfer::public_transfer<Coin<SUI>>(
+        coin::take<SUI>(origin_balance, tax_amount, ctx),
+        tax_receiver
+      );
+      tax_amount
+    } else {
+      let loyalty_fee = royalty_rule::fee_amount<T>(policy, listing.price);
+      let paid_loyalty = coin::take<SUI>(
+        origin_balance,
+        loyalty_fee,
+        ctx
+      );
+      let new_transfer_request = transfer_policy::new_request<T>(
+        listing.nft,
+        listing.price,
+        listing.nft
+      );
+      royalty_rule::pay<T>(
+        policy,
+        &mut new_transfer_request,
+        paid_loyalty
+      );
+      transfer_policy::confirm_request<T>(
+        policy,
+        new_transfer_request
+      );
+      loyalty_fee
+    };
 
+    let net_price = listing.price - market_fee - other_fee;
+    transfer::public_transfer<Coin<SUI>>(
+      coin::take<SUI>(
+        origin_balance,
+        net_price,
+        ctx
+      ),
+      seller
+    );
+    transfer::public_transfer(
+      dynamic_field::remove<Item, T>(
+        &mut listing.id, 
+        Item { id: listing.nft }
+      ),
+      sender
+    );
+    event::emit(
+      BuyEvent<SUI> {
+        seller,
+        buyer: sender,
+        listing_id: *object::borrow_id<Listing<SUI>>(listing),
+        nft_id: listing.nft,
+        marketplace: listing.market_id,
+        price: listing.price
+      }
+    );
+    paid_with_sui
+  }
 }

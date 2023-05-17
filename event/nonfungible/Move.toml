@@ -9,11 +9,11 @@ version = "0.0.1"
 [dependencies.Sui]
 git = "https://github.com/MystenLabs/sui.git"
 subdir = "crates/sui-framework/packages/sui-framework"
-rev = "testnet"
+rev = "ae1212baf8f0837e25926d941db3d26a61c1bea2"
 
 
 
 [addresses]
 nonfungible = "0x0"
-sui =  "0000000000000000000000000000000000000000000000000000000000000002"
+sui =  "0x2"
 zero_ref = "0000000000000000000000000000000000000000000000000000000000000010"
